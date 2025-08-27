@@ -6,69 +6,91 @@
   <title>Spotify Beat Visualizer – iPad</title>
   <style>
     :root { --bg:#0a0b0f; --fg:#e5e7eb; --muted:#9ca3af; --accent:#22d3ee; }
-    html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji; }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
     #stage { position:fixed; inset:0; display:block; background: radial-gradient(1200px 800px at 50% 50%, #12141b 0%, #0a0b0f 60%, #07080c 100%); }
-    #ui { position: fixed; left: 16px; right: 16px; top: env(safe-area-inset-top, 16px); display:flex; flex-wrap:wrap; gap:10px; align-items:center; z-index:10; backdrop-filter: blur(10px); background: rgba(10,11,15,.45); border:1px solid rgba(255,255,255,.08); padding:12px; border-radius:16px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+
+    /* Top UI bar */
+    #ui { position: fixed; left: 16px; right: 16px; top: env(safe-area-inset-top, 16px);
+          display:flex; flex-wrap:wrap; gap:10px; align-items:center; z-index:10;
+          backdrop-filter: blur(10px); background: rgba(10,11,15,.45);
+          border:1px solid rgba(255,255,255,.08); padding:12px; border-radius:16px;
+          box-shadow: 0 10px 30px rgba(0,0,0,.35); }
     #ui > * { font-size:16px; }
-    button, select, input[type="text"] { appearance:none; border-radius:12px; border:1px solid rgba(255,255,255,.12); background:#11131a; color:var(--fg); padding:10px 12px; outline:none; }
+    button, select, input[type="text"], input[type="range"] {
+      appearance:none; border-radius:12px; border:1px solid rgba(255,255,255,.12);
+      background:#11131a; color:var(--fg); padding:10px 12px; outline:none;
+    }
     button { font-weight:600; }
     button.primary { background: linear-gradient(180deg, #11b5cc, #0ea5b1); border-color: transparent; color:#031419; }
     button.ghost { background: transparent; border-color: rgba(255,255,255,.18); }
     button:active { transform: translateY(1px); }
+
+    #np { font-size:14px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 48vw; }
+
+    /* Search row */
     #row2 { display:flex; flex:1; gap:10px; min-width: 270px; }
     #row2 input { flex:1; min-width:120px; }
-    #np { font-size:14px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 48vw; }
-    #dock { position: fixed; bottom: env(safe-area-inset-bottom, 16px); left: 16px; right: 16px; display:flex; justify-content:space-between; align-items:center; gap:10px; z-index:10;}
+
+    /* Library row */
+    #rowLib { display:grid; grid-template-columns:auto 1fr auto auto; gap:10px; width:100%; }
+
+    /* Bottom dock */
+    #dock { position: fixed; bottom: env(safe-area-inset-bottom, 16px); left: 16px; right: 16px;
+            display:flex; justify-content:space-between; align-items:center; gap:10px; z-index:10; }
     #hints { font-size:12px; color:var(--muted); opacity:.9; }
+
     #tapOverlay { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.5); color:white; z-index:20; }
     #tapOverlay .box { text-align:center; padding:28px; border-radius:20px; background:rgba(17,19,26,.8); border:1px solid rgba(255,255,255,.12); }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace; }
     a { color: var(--accent); text-decoration: none; }
     details { cursor: pointer; }
   </style>
 </head>
 <body>
-  <!--
-  ⚙️ QUICK SETUP (5–10 min)
-  1) Create a Spotify developer app: https://developer.spotify.com/dashboard
-     - App name: "iPad Viz" (or whatever)
-     - Redirect URI: set to the exact URL where this file will be hosted (e.g. https://yoursite.com/viz.html)
-  2) Put your CLIENT ID in SPOTIFY_CLIENT_ID below and your REDIRECT_URI to that URL.
-  3) Open this page on iPad Chrome (or Safari). Tap "Connect Spotify", approve scopes, then "Start Visualizer".
-  4) Paste any Spotify URL (track/album/playlist) and hit "Play". The visuals sync to Spotify's beat map.
-
-  ❗Notes
-  - Requires Spotify Premium to use the Web Playback SDK.
-  - iOS requires a user gesture to start audio. Use the big Start button if playback is stuck.
-  - This visualizer uses Spotify's Audio Analysis (beats/bars/sections) to create a 2000s-style pulsing effect without tapping raw PCM (DRM).
-  - Works as a single static HTML file. No server code needed beyond hosting the file at an HTTPS URL you control.
-  -->
+  <!-- Notes:
+       - Needs Spotify Premium for web playback
+       - iOS requires user gesture to unlock audio (Start button / overlay)
+       - Beat sync uses Spotify Audio Analysis + current progress (no raw PCM) -->
 
   <canvas id="stage"></canvas>
 
   <div id="ui">
     <button id="connect" class="primary">Connect Spotify</button>
     <button id="start" class="ghost">Start Visualizer</button>
-    <label>
-      Mode
+
+    <label>Mode
       <select id="mode">
         <option value="rings">Rings</option>
         <option value="bars">Bars</option>
         <option value="particles">Particles</option>
       </select>
     </label>
-    <label>
-      Sensitivity
+
+    <label>Sensitivity
       <input id="sens" type="range" min="0.5" max="2.0" step="0.05" value="1.0" />
     </label>
+
     <span id="np">—</span>
+
+    <!-- Row: paste URL / play -->
     <div id="row2">
       <input id="uri" type="text" placeholder="Paste Spotify URL (track/album/playlist)…" />
       <button id="play" class="ghost">Play</button>
       <button id="fs" class="ghost">Fullscreen</button>
     </div>
+
+    <!-- Row: library + follow native app -->
+    <div id="rowLib">
+      <button id="loadLib" class="ghost">Load Library</button>
+      <select id="plSelect"><option>—</option></select>
+      <button id="playPl" class="ghost">Play Playlist</button>
+      <label style="display:flex; align-items:center; gap:6px;">
+        <input type="checkbox" id="follow" /> Follow App Playback
+      </label>
+    </div>
   </div>
 
+  <!-- Bottom dock -->
   <div id="dock">
     <div id="hints">
       Tip: you can switch modes live. Visuals pulse on beats (from Spotify analysis).<br/>
@@ -77,9 +99,9 @@
     <details>
       <summary>Help</summary>
       <div style="max-width:560px; font-size:13px; line-height:1.35">
-        <p><strong>Client ID & Redirect:</strong> open the source and set <span class="mono">SPOTIFY_CLIENT_ID</span> + <span class="mono">REDIRECT_URI</span>.</p>
-        <p><strong>Permissions:</strong> the app needs streaming & playback state scopes to run the web player and sync visuals.</p>
-        <p><strong>Why no waveform?</strong> Spotify streams are DRM-protected in the browser; we use official beat timing instead.</p>
+        <p><strong>Client ID & Redirect:</strong> set <span class="mono">SPOTIFY_CLIENT_ID</span> + <span class="mono">REDIRECT_URI</span> below.</p>
+        <p><strong>Permissions:</strong> streaming, playback state, library read.</p>
+        <p><strong>No waveform:</strong> DRM; we use official beat timings.</p>
       </div>
     </details>
   </div>
@@ -89,200 +111,131 @@
   <!-- Spotify Web Playback SDK -->
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
   <script>
-  /**********************
-   * CONFIG – EDIT THESE
-   **********************/
+  /******** CONFIG ********/
   const SPOTIFY_CLIENT_ID = "1837421d433e4332bfc6864b03bdfeae";
-  const REDIRECT_URI = "https://owcowboy.github.io/retrowave-viz/";
+  const REDIRECT_URI      = "https://owcowboy.github.io/retrowave-viz/";
 
   const SCOPES = [
     "streaming",
     "user-read-email",
     "user-read-private",
     "user-read-playback-state",
-    "user-modify-playback-state"
+    "user-modify-playback-state",
+    "user-read-currently-playing",
+    "user-library-read",
+    "playlist-read-private"
   ];
 
-  /**********************
-   * UTILITIES
-   **********************/
-  const $ = sel => document.querySelector(sel);
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const log = (...args) => { console.log(...args); const d=$('#dbg'); if(d) d.textContent = args.join(' '); };
+  /******** UTIL ********/
+  const $ = s=>document.querySelector(s);
+  const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+  const log = (...a)=>{ console.log(...a); const d=$('#dbg'); if(d) d.textContent=a.join(' '); };
 
-  // Base64url helpers
-  function base64urlencode(buf){ return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
-  async function sha256(s){ const enc=new TextEncoder().encode(s); const buf=await crypto.subtle.digest('SHA-256', enc); return base64urlencode(buf); }
-  function randomString(len=64){ const a=new Uint8Array(len); crypto.getRandomValues(a); return Array.from(a, b => ('0'+b.toString(16)).slice(-2)).join(''); }
-
-  // Token store
-  const store = {
-    get(){ try { return JSON.parse(localStorage.getItem('sp_tokens')||'{}'); } catch { return {}; }},
-    set(v){ localStorage.setItem('sp_tokens', JSON.stringify(v)); },
-    clear(){ localStorage.removeItem('sp_tokens'); }
-  };
-
-  function nowSec(){ return Math.floor(Date.now()/1000); }
+  const store={get(){try{return JSON.parse(localStorage.getItem('sp_tokens')||'{}')}catch{return{}}},set(v){localStorage.setItem('sp_tokens',JSON.stringify(v))},clear(){localStorage.removeItem('sp_tokens')}};
+  function base64urlencode(buf){return btoa(String.fromCharCode.apply(null,new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+  async function sha256(s){const enc=new TextEncoder().encode(s);const buf=await crypto.subtle.digest('SHA-256',enc);return base64urlencode(buf)}
+  function randomString(len=64){const a=new Uint8Array(len);crypto.getRandomValues(a);return Array.from(a,b=>('0'+b.toString(16)).slice(-2)).join('')}
+  const nowSec=()=>Math.floor(Date.now()/1000);
 
   async function authStart(){
-    if(!SPOTIFY_CLIENT_ID || SPOTIFY_CLIENT_ID.startsWith('PASTE_')){
-      alert('Set SPOTIFY_CLIENT_ID in the HTML first.'); return;
-    }
-    if(!REDIRECT_URI || REDIRECT_URI.includes('your-domain')){
-      alert('Set REDIRECT_URI in the HTML to the exact hosted URL of this file.'); return;
-    }
-    const verifier = randomString(64);
-    const challenge = await sha256(verifier);
-    localStorage.setItem('pkce_verifier', verifier);
-    const url = new URL('https://accounts.spotify.com/authorize');
-    url.searchParams.set('client_id', SPOTIFY_CLIENT_ID);
-    url.searchParams.set('response_type', 'code');
-    url.searchParams.set('redirect_uri', REDIRECT_URI);
-    url.searchParams.set('code_challenge_method', 'S256');
-    url.searchParams.set('code_challenge', challenge);
-    url.searchParams.set('scope', SCOPES.join(' '));
+    if(!SPOTIFY_CLIENT_ID){ alert('Set SPOTIFY_CLIENT_ID'); return; }
+    if(!REDIRECT_URI){ alert('Set REDIRECT_URI'); return; }
+    const verifier=randomString(64); const challenge=await sha256(verifier); localStorage.setItem('pkce_verifier',verifier);
+    const url=new URL('https://accounts.spotify.com/authorize');
+    url.searchParams.set('client_id',SPOTIFY_CLIENT_ID);
+    url.searchParams.set('response_type','code');
+    url.searchParams.set('redirect_uri',REDIRECT_URI);
+    url.searchParams.set('code_challenge_method','S256');
+    url.searchParams.set('code_challenge',challenge);
+    url.searchParams.set('scope',SCOPES.join(' '));
     location.assign(url.toString());
   }
 
   async function authHandleRedirect(){
-    const params = new URLSearchParams(location.search);
-    if(params.has('error')){ alert('Spotify auth error: '+params.get('error')); }
+    const params=new URLSearchParams(location.search);
+    if(params.has('error')) alert('Auth error: '+params.get('error'));
     if(!params.has('code')) return null;
-    const code = params.get('code');
-    // Clean URL
-    history.replaceState({}, '', location.pathname);
+    const code=params.get('code'); history.replaceState({},'',location.pathname);
+    const verifier=localStorage.getItem('pkce_verifier'); if(!verifier){ alert('Missing PKCE verifier'); return null; }
 
-    const verifier = localStorage.getItem('pkce_verifier');
-    if(!verifier){ alert('Missing PKCE verifier. Try connecting again.'); return null; }
+    const body=new URLSearchParams();
+    body.set('client_id',SPOTIFY_CLIENT_ID);
+    body.set('grant_type','authorization_code');
+    body.set('code',code);
+    body.set('redirect_uri',REDIRECT_URI);
+    body.set('code_verifier',verifier);
 
-    const body = new URLSearchParams();
-    body.set('client_id', SPOTIFY_CLIENT_ID);
-    body.set('grant_type', 'authorization_code');
-    body.set('code', code);
-    body.set('redirect_uri', REDIRECT_URI);
-    body.set('code_verifier', verifier);
-
-    const r = await fetch('https://accounts.spotify.com/api/token', {
-      method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body
-    });
-    if(!r.ok){ const t = await r.text(); alert('Token exchange failed: '+t); return null; }
-    const tok = await r.json();
-    const tokens = { access_token: tok.access_token, refresh_token: tok.refresh_token, expires_at: nowSec()+tok.expires_in-30 };
-    store.set(tokens);
-    return tokens;
+    const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
+    if(!r.ok){ const t=await r.text(); alert('Token exchange failed: '+t); return null; }
+    const tok=await r.json();
+    const t={access_token:tok.access_token,refresh_token:tok.refresh_token,expires_at:nowSec()+tok.expires_in-30};
+    store.set(t); return t;
   }
 
   async function authEnsure(){
-    let t = store.get();
-    if(!t.access_token) return null;
-    if(nowSec() < (t.expires_at||0)) return t;
-    // refresh
+    let t=store.get(); if(!t.access_token) return null;
+    if(nowSec()<(t.expires_at||0)) return t;
     if(!t.refresh_token) return null;
-    const body = new URLSearchParams();
-    body.set('client_id', SPOTIFY_CLIENT_ID);
-    body.set('grant_type', 'refresh_token');
-    body.set('refresh_token', t.refresh_token);
-    const r = await fetch('https://accounts.spotify.com/api/token', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
+    const body=new URLSearchParams(); body.set('client_id',SPOTIFY_CLIENT_ID); body.set('grant_type','refresh_token'); body.set('refresh_token',t.refresh_token);
+    const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
     if(!r.ok){ store.clear(); return null; }
-    const tok = await r.json();
-    t.access_token = tok.access_token;
-    t.expires_at = nowSec()+tok.expires_in-30;
-    if(tok.refresh_token) t.refresh_token = tok.refresh_token; // sometimes new one arrives
-    store.set(t);
-    return t;
+    const tok=await r.json(); t.access_token=tok.access_token; t.expires_at=nowSec()+tok.expires_in-30; if(tok.refresh_token) t.refresh_token=tok.refresh_token; store.set(t); return t;
   }
 
-  /**********************
-   * SPOTIFY API HELPERS
-   **********************/
-  async function apiFetch(path, opts={}){
-    const t = await authEnsure();
-    if(!t) throw new Error('Not authenticated');
-    const r = await fetch('https://api.spotify.com/v1'+path, {
-      method: opts.method||'GET',
-      headers: { 'Authorization': 'Bearer '+t.access_token, 'Content-Type':'application/json' },
-      body: opts.body ? JSON.stringify(opts.body) : undefined
-    });
-    if(r.status === 204) return null;
-    if(!r.ok){ const txt = await r.text(); throw new Error('API '+r.status+': '+txt); }
+  /******** SPOTIFY API HELPERS ********/
+  async function apiFetch(path,opts={}){
+    const t=await authEnsure(); if(!t) throw new Error('Not authenticated');
+    const r=await fetch('https://api.spotify.com/v1'+path,{method:opts.method||'GET',headers:{'Authorization':'Bearer '+t.access_token,'Content-Type':'application/json'},body:opts.body?JSON.stringify(opts.body):undefined});
+    if(r.status===204) return null;
+    if(!r.ok){ const txt=await r.text(); throw new Error('API '+r.status+': '+txt); }
     return await r.json();
   }
-
-  async function transferTo(device_id){
-    return apiFetch('/me/player', { method:'PUT', body:{ device_ids:[device_id], play:true } });
-  }
-
+  async function transferTo(device_id){ return apiFetch('/me/player',{method:'PUT',body:{device_ids:[device_id],play:true}}); }
   async function playURI(uri){
-    if(uri.startsWith('spotify:track:')){
-      return apiFetch('/me/player/play', { method:'PUT', body:{ uris:[uri] } });
-    } else {
-      return apiFetch('/me/player/play', { method:'PUT', body:{ context_uri: uri } });
-    }
+    if(uri.startsWith('spotify:track:')) return apiFetch('/me/player/play',{method:'PUT',body:{uris:[uri]}});
+    return apiFetch('/me/player/play',{method:'PUT',body:{context_uri:uri}});
   }
-
   function parseSpotify(input){
-    input = input.trim();
-    if(!input) return null;
-    try {
-      const u = new URL(input);
-      if(u.hostname.includes('open.spotify.com')){
-        const parts = u.pathname.split('/').filter(Boolean);
-        const type = parts[0]; const id = parts[1];
-        return { type, id, uri: `spotify:${type}:${id}` };
-      }
-    } catch {}
-    if(input.startsWith('spotify:')){
-      const parts = input.split(':');
-      return { type:parts[1], id:parts[2], uri: input };
-    }
+    input=input.trim(); if(!input) return null;
+    try{ const u=new URL(input); if(u.hostname.includes('open.spotify.com')){ const p=u.pathname.split('/').filter(Boolean); return {type:p[0], id:p[1], uri:`spotify:${p[0]}:${p[1]}`}; } }catch{}
+    if(input.startsWith('spotify:')){ const parts=input.split(':'); return {type:parts[1], id:parts[2], uri:input}; }
     return null;
   }
+  async function getAudioAnalysis(trackId){ return apiFetch('/audio-analysis/'+trackId); }
+  async function getAudioFeatures(trackId){ return apiFetch('/audio-features/'+trackId); }
 
-  async function getAudioAnalysis(trackId){
-    return apiFetch('/audio-analysis/'+trackId);
-  }
-
-  async function getAudioFeatures(trackId){
-    return apiFetch('/audio-features/'+trackId);
-  }
-
-  /**********************
-   * PLAYER + STATE
-   **********************/
+  /******** PLAYER + STATE ********/
   let player, deviceId=null, isReady=false;
   let currentTrackId=null, currentTrackName='—', analysis=null, features=null;
   let positionMs=0, paused=true, lastTs=0;
+  let followApp=false;
 
-  window.onSpotifyWebPlaybackSDKReady = () => {
+  window.onSpotifyWebPlaybackSDKReady=()=>{
     log('SDK ready');
-    player = new Spotify.Player({
-      name: 'iPad Viz',
-      getOAuthToken: async cb => {
-        const t = await authEnsure();
-        if(!t){ log('Not authed'); return; }
-        cb(t.access_token);
-      },
-      volume: 0.8
+    player=new Spotify.Player({
+      name:'iPad Viz',
+      getOAuthToken: async cb=>{ const t=await authEnsure(); if(!t){ log('Not authed'); return; } cb(t.access_token); },
+      volume:0.8
     });
 
-    player.addListener('ready', ({ device_id }) => { deviceId = device_id; isReady = true; log('Device', device_id); });
-    player.addListener('not_ready', ({ device_id }) => { if(device_id===deviceId) isReady=false; });
-    player.addListener('initialization_error', e => alert('Init error: '+e.message));
-    player.addListener('authentication_error', e => alert('Auth error: '+e.message));
-    player.addListener('account_error', e => alert('Account error: '+e.message));
+    player.addListener('ready',({device_id})=>{ deviceId=device_id; isReady=true; log('Device',device_id); });
+    player.addListener('not_ready',({device_id})=>{ if(device_id===deviceId) isReady=false; });
+    player.addListener('initialization_error', e=>alert('Init error: '+e.message));
+    player.addListener('authentication_error', e=>alert('Auth error: '+e.message));
+    player.addListener('account_error', e=>alert('Account error: '+e.message));
 
-    player.addListener('player_state_changed', s => {
+    player.addListener('player_state_changed', s=>{
       if(!s) return;
       paused = s.paused;
       positionMs = s.position;
       const tr = s.track_window.current_track;
       const id = tr && tr.id;
       if(id && id !== currentTrackId){
-        currentTrackId = id; currentTrackName = `${tr.name} — ${tr.artists.map(a=>a.name).join(', ')}`;
+        currentTrackId = id;
+        currentTrackName = `${tr.name} — ${tr.artists.map(a=>a.name).join(', ')}`;
         $('#np').textContent = 'Now Playing: '+currentTrackName;
-        // Load analysis and features in background
-        getAudioAnalysis(id).then(a => { analysis = a; setupBeatMap(); }).catch(err => log('analysis err', err));
-        getAudioFeatures(id).then(f => { features = f; }).catch(()=>{});
+        getAudioAnalysis(id).then(a=>{ analysis=a; setupBeatMap(); }).catch(err=>log('analysis err',err));
+        getAudioFeatures(id).then(f=>{ features=f; }).catch(()=>{});
       }
     });
 
@@ -292,172 +245,164 @@
   async function startPlaybackFlow(){
     if(!player){ alert('Spotify SDK not ready yet.'); return; }
     if(!isReady){ await sleep(400); }
-    try {
-      await transferTo(deviceId);
-    } catch (e){ log('transfer fail', e.message); }
+    try { await transferTo(deviceId); } catch(e){ log('transfer fail', e.message); }
+    try { await player.resume(); } catch {}
   }
 
-  /**********************
-   * BEAT MAP (from analysis)
-   **********************/
-  let beatIdx = 0, beats = [], bars = [], sections = [];
-
+  /******** BEAT MAP ********/
+  let beatIdx=0, beats=[], bars=[], sections=[];
   function setupBeatMap(){
-    beatIdx = 0;
-    beats = (analysis?.beats||[]).map(b => ({ t: Math.round(b.start*1000), d: Math.round(b.duration*1000) }));
-    bars = (analysis?.bars||[]).map(b => ({ t: Math.round(b.start*1000), d: Math.round(b.duration*1000) }));
-    sections = (analysis?.sections||[]).map(s => ({ t: Math.round(s.start*1000), d: Math.round(s.duration*1000), k: s.key, m: s.mode, l: s.loudness }));
+    beatIdx=0;
+    beats = (analysis?.beats||[]).map(b=>({t:Math.round(b.start*1000), d:Math.round(b.duration*1000)}));
+    bars  = (analysis?.bars||[]).map(b=>({t:Math.round(b.start*1000), d:Math.round(b.duration*1000)}));
+    sections = (analysis?.sections||[]).map(s=>({t:Math.round(s.start*1000), d:Math.round(s.duration*1000), k:s.key, m:s.mode, l:s.loudness}));
   }
-
   function nextBeatAt(ms){
-    while(beatIdx+1 < beats.length && beats[beatIdx+1].t <= ms){ beatIdx++; }
-    const b = beats[beatIdx];
-    return b ? b.t : Infinity;
+    while(beatIdx+1<beats.length && beats[beatIdx+1].t<=ms){ beatIdx++; }
+    const b=beats[beatIdx]; return b?b.t:Infinity;
   }
 
-  /**********************
-   * CANVAS + VISUALS
-   **********************/
-  const canvas = $('#stage');
-  const ctx = canvas.getContext('2d');
-  let W=0,H=0, DPR=1;
-  function resize(){ DPR = Math.min(devicePixelRatio||1, 2); W = canvas.width = Math.floor(innerWidth*DPR); H = canvas.height = Math.floor(innerHeight*DPR); canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px'; ctx.imageSmoothingEnabled = true; }
-  addEventListener('resize', resize, { passive:true }); resize();
+  /******** CANVAS + VISUALS ********/
+  const canvas=$('#stage'); const ctx=canvas.getContext('2d');
+  let W=0,H=0,DPR=1;
+  function resize(){ DPR=Math.min(devicePixelRatio||1,2); W=canvas.width=Math.floor(innerWidth*DPR); H=canvas.height=Math.floor(innerHeight*DPR); canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px'; ctx.imageSmoothingEnabled=true; }
+  addEventListener('resize',resize,{passive:true}); resize();
 
-  let mode = 'rings';
-  $('#mode').addEventListener('change', e => mode = e.target.value);
-  let sensitivity = 1.0; $('#sens').addEventListener('input', e => sensitivity = parseFloat(e.target.value));
+  let mode='rings';
+  let sensitivity=1.0;
+  $('#mode').addEventListener('change',e=>mode=e.target.value);
+  $('#sens').addEventListener('input',e=>sensitivity=parseFloat(e.target.value));
 
-  let beatPulse = 0, barPulse=0; // decays per frame
-  let lastBeatT = -1;
-
+  let beatPulse=0, barPulse=0, lastBeatT=-1;
   function draw(now){
     requestAnimationFrame(draw);
-    // Advance position estimate when playing
-    const dt = lastTs ? (now - lastTs) : 16; lastTs = now;
+    const dt = lastTs ? (now-lastTs) : 16; lastTs=now;
     if(!paused) positionMs += dt;
 
-    // Beat detection from schedule
     const nb = nextBeatAt(positionMs);
-    if(positionMs >= nb && nb !== lastBeatT){ beatPulse = 1.0; lastBeatT = nb; }
+    if(positionMs>=nb && nb!==lastBeatT){ beatPulse=1.0; lastBeatT=nb; }
     beatPulse *= 0.92; if(beatPulse<0.02) beatPulse=0;
 
-    // Bar pulse (slower)
-    if(bars.length){ const bar = bars.findLast ? bars.findLast(b=>b.t<=positionMs) : bars.filter(b=>b.t<=positionMs).slice(-1)[0]; if(bar && (positionMs - bar.t) < 50) barPulse = 1.0; }
+    if(bars.length){ const bar = bars.filter(b=>b.t<=positionMs).slice(-1)[0]; if(bar && (positionMs-bar.t)<50) barPulse=1.0; }
     barPulse *= 0.96;
 
-    // Clear with slight trail for CRT vibe
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(10,11,15,0.25)';
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='rgba(10,11,15,0.25)';
     ctx.fillRect(0,0,W,H);
 
-    // Center
-    const cx=W/2, cy=H/2; const baseR = Math.min(W,H)*0.22; const time = now*0.001;
-
+    const cx=W/2, cy=H/2; const baseR=Math.min(W,H)*0.22; const t=now*0.001;
     switch(mode){
-      case 'rings': drawRings(cx,cy,baseR,time); break;
-      case 'bars': drawBars(cx,cy,baseR,time); break;
-      case 'particles': drawParticles(cx,cy,baseR,time); break;
+      case 'rings': drawRings(cx,cy,baseR,t); break;
+      case 'bars': drawBars(cx,cy,baseR,t); break;
+      case 'particles': drawParticles(cx,cy,baseR,t); break;
     }
-
-    // HUD glow
-    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalCompositeOperation='lighter';
     ctx.beginPath(); ctx.arc(cx,cy, baseR*(1+0.02*barPulse+0.03*beatPulse), 0, Math.PI*2);
-    ctx.strokeStyle = 'rgba(34,211,238,0.18)'; ctx.lineWidth = 2*DPR; ctx.stroke();
+    ctx.strokeStyle='rgba(34,211,238,0.18)'; ctx.lineWidth=2*DPR; ctx.stroke();
   }
   requestAnimationFrame(draw);
 
-  function hueShift(t, s=0.7, l=0.55){ // generate neon-ish colors over time
-    const h = ( (t*40 + 3600) % 360 );
-    return `hsl(${h} ${s*100}% ${l*100}%)`;
-  }
-
+  function hueShift(t,s=0.7,l=0.55){ const h=((t*40+3600)%360); return `hsl(${h} ${s*100}% ${l*100}%)`; }
   function drawRings(cx,cy,r,t){
-    const layers = 4;
+    const layers=4;
     for(let i=0;i<layers;i++){
-      const rr = r*(1 + i*0.18 + 0.05*Math.sin(t*1.2+i));
-      const w = 6*DPR + i*1.5*DPR + 8*beatPulse*sensitivity;
-      ctx.beginPath(); ctx.arc(cx,cy, rr, 0, Math.PI*2);
-      ctx.strokeStyle = hueShift(t + i*0.13, 0.9, 0.6);
-      ctx.globalAlpha = 0.65 + 0.35*Math.sin(t*0.7+i) + 0.5*beatPulse*sensitivity;
-      ctx.lineWidth = w; ctx.stroke();
+      const rr=r*(1+i*0.18+0.05*Math.sin(t*1.2+i));
+      const w=6*DPR+i*1.5*DPR+8*beatPulse*sensitivity;
+      ctx.beginPath(); ctx.arc(cx,cy,rr,0,Math.PI*2);
+      ctx.strokeStyle=hueShift(t+i*0.13,0.9,0.6);
+      ctx.globalAlpha=0.65+0.35*Math.sin(t*0.7+i)+0.5*beatPulse*sensitivity;
+      ctx.lineWidth=w; ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha=1;
   }
-
   function drawBars(cx,cy,r,t){
-    const N = 96;
-    const amp = 0.5 + 0.8*beatPulse*sensitivity;
+    const N=96; const amp=0.5+0.8*beatPulse*sensitivity;
     for(let i=0;i<N;i++){
-      const a = (i/N)*Math.PI*2 + t*0.1;
-      const k = (Math.sin(i*0.3 + t*2.1) + Math.sin(i*0.7 + t*1.3))*0.5; // fake movement
-      const len = r*0.55 + (r*0.95)*(0.3 + 0.35*k + amp*0.35);
-      const x1 = cx + Math.cos(a)*(r*0.75);
-      const y1 = cy + Math.sin(a)*(r*0.75);
-      const x2 = cx + Math.cos(a)*(r*0.75 + len);
-      const y2 = cy + Math.sin(a)*(r*0.75 + len);
+      const a=(i/N)*Math.PI*2+t*0.1;
+      const k=(Math.sin(i*0.3+t*2.1)+Math.sin(i*0.7+t*1.3))*0.5;
+      const len=r*0.55+(r*0.95)*(0.3+0.35*k+amp*0.35);
+      const x1=cx+Math.cos(a)*(r*0.75), y1=cy+Math.sin(a)*(r*0.75);
+      const x2=cx+Math.cos(a)*(r*0.75+len), y2=cy+Math.sin(a)*(r*0.75+len);
       ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
-      ctx.strokeStyle = hueShift(t + i*0.02, 0.9, 0.65);
-      ctx.globalAlpha = 0.6 + 0.4*Math.sin(t*0.8 + i*0.05) + 0.5*beatPulse*sensitivity;
-      ctx.lineWidth = 3*DPR; ctx.stroke();
+      ctx.strokeStyle=hueShift(t+i*0.02,0.9,0.65);
+      ctx.globalAlpha=0.6+0.4*Math.sin(t*0.8+i*0.05)+0.5*beatPulse*sensitivity;
+      ctx.lineWidth=3*DPR; ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha=1;
   }
-
-  const particles = Array.from({length: 220}, () => ({ x:Math.random(), y:Math.random(), v:Math.random()*0.001+0.0005, r:Math.random()*2+0.5 }));
+  const particles=Array.from({length:220},()=>({x:Math.random(),y:Math.random(),v:Math.random()*0.001+0.0005,r:Math.random()*2+0.5}));
   function drawParticles(cx,cy,r,t){
-    const rad = r*1.15;
+    const rad=r*1.15;
     for(const p of particles){
-      p.x += (Math.sin(t*0.2+p.y*9)+0.5)*p.v*(1+beatPulse*2*sensitivity);
-      p.y += (Math.cos(t*0.25+p.x*9)+0.5)*p.v*(1+beatPulse*2*sensitivity);
+      p.x+=(Math.sin(t*0.2+p.y*9)+0.5)*p.v*(1+beatPulse*2*sensitivity);
+      p.y+=(Math.cos(t*0.25+p.x*9)+0.5)*p.v*(1+beatPulse*2*sensitivity);
       if(p.x>1) p.x-=1; if(p.x<0) p.x+=1; if(p.y>1) p.y-=1; if(p.y<0) p.y+=1;
-      const x = cx + (p.x-0.5)*rad*2.2;
-      const y = cy + (p.y-0.5)*rad*2.2;
-      ctx.beginPath(); ctx.arc(x,y, (p.r + beatPulse*1.2*sensitivity)*DPR, 0, Math.PI*2);
-      ctx.fillStyle = hueShift(t + p.x*2 + p.y*2, 0.95, 0.62);
-      ctx.globalAlpha = 0.45 + 0.5*Math.abs(Math.sin((p.x+p.y+t)*2)) + 0.5*beatPulse*sensitivity;
+      const x=cx+(p.x-0.5)*rad*2.2, y=cy+(p.y-0.5)*rad*2.2;
+      ctx.beginPath(); ctx.arc(x,y,(p.r+beatPulse*1.2*sensitivity)*DPR,0,Math.PI*2);
+      ctx.fillStyle=hueShift(t+p.x*2+p.y*2,0.95,0.62);
+      ctx.globalAlpha=0.45+0.5*Math.abs(Math.sin((p.x+p.y+t)*2))+0.5*beatPulse*sensitivity;
       ctx.fill();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha=1;
   }
 
-  /**********************
-   * UI WIRING
-   **********************/
+  /******** FOLLOW SPOTIFY APP (poll) ********/
+  setInterval(async ()=>{
+    if(!followApp) return;
+    try{
+      const st = await apiFetch('/me/player');
+      if(!st) return;
+      paused = !st.is_playing;
+      positionMs = st.progress_ms || 0;
+      if(st.item){
+        const id = st.item.id;
+        if(id && id !== currentTrackId){
+          currentTrackId = id;
+          currentTrackName = `${st.item.name} — ${(st.item.artists||[]).map(a=>a.name).join(', ')}`;
+          $('#np').textContent = 'Now Playing: ' + currentTrackName;
+          try { analysis = await getAudioAnalysis(id); setupBeatMap(); } catch {}
+        }
+      }
+    }catch(e){ /* ignore transient errors */ }
+  }, 1000);
+
+  /******** UI WIRING ********/
   $('#connect').addEventListener('click', authStart);
-  $('#start').addEventListener('click', async () => {
-    await startPlaybackFlow();
-    try { await player.resume(); } catch {}
-  });
-  $('#play').addEventListener('click', async () => {
-    const p = parseSpotify($('#uri').value);
+  $('#start').addEventListener('click', startPlaybackFlow);
+  $('#play').addEventListener('click', async ()=>{
+    const p=parseSpotify($('#uri').value);
     if(!p){ alert('Paste a valid Spotify link or URI.'); return; }
     if(!deviceId){ await startPlaybackFlow(); }
-    await playURI(p.uri).catch(e => alert('Play failed: '+e.message));
+    await playURI(p.uri).catch(e=>alert('Play failed: '+e.message));
   });
-  $('#fs').addEventListener('click', () => {
-    if(document.fullscreenElement){ document.exitFullscreen(); } else { document.documentElement.requestFullscreen().catch(()=>{}); }
-  });
+  $('#fs').addEventListener('click', ()=>{ if(document.fullscreenElement){ document.exitFullscreen(); } else { document.documentElement.requestFullscreen().catch(()=>{}); } });
+  $('#unlock').addEventListener('click', async ()=>{ $('#tapOverlay').style.display='none'; try{ await player.resume(); }catch{} });
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible'){ $('#tapOverlay').style.display='grid'; } });
 
-  $('#unlock').addEventListener('click', async () => {
-    $('#tapOverlay').style.display='none';
-    try{ await player.resume(); }catch{}
+  // Library controls
+  $('#loadLib').addEventListener('click', async ()=>{
+    try{
+      const data = await apiFetch('/me/playlists?limit=50');
+      const sel = $('#plSelect'); sel.innerHTML='';
+      (data.items||[]).forEach(p=>{
+        const o=document.createElement('option'); o.value=p.uri; o.textContent=p.name; sel.appendChild(o);
+      });
+    }catch(e){ alert('Could not load playlists: '+e.message); }
   });
-
-  // Show overlay after user returns from auth (iOS gesture requirement)
-  document.addEventListener('visibilitychange', () => {
-    if(document.visibilityState==='visible'){
-      $('#tapOverlay').style.display='grid';
-    }
+  $('#playPl').addEventListener('click', async ()=>{
+    const uri=$('#plSelect').value;
+    if(!uri || uri==='—'){ alert('Pick a playlist first'); return; }
+    if(!deviceId){ await startPlaybackFlow(); }
+    await playURI(uri).catch(e=>alert('Play failed: '+e.message));
   });
+  $('#follow').addEventListener('change', e=>{ followApp = e.target.checked; });
 
-  // Boot: catch redirect, try to use existing session
+  // Boot
   (async function init(){
     await authHandleRedirect();
-    const t = await authEnsure();
-    if(t){ $('#connect').textContent = 'Connected ✓'; $('#connect').disabled = true; }
+    const t=await authEnsure();
+    if(t){ $('#connect').textContent='Connected ✓'; $('#connect').disabled=true; }
   })();
-
   </script>
 </body>
 </html>
